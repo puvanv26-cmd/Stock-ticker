@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Stock Ticker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        .api-note {
+            background: #fff3cd;
+            padding: 12px;
+            border-radius: 5px;
+            border-left: 4px solid #ffc107;
+            font-size: 14px;
+            color: #856404;
+        }
+
+        .ticker-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .stock-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+
+        .stock-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .stock-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .symbol {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .remove-btn {
+            background: #dc3545;
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .remove-btn:hover {
+            background: #c82333;
+        }
+
+        .price {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .change {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .change.positive {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .change.negative {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .info {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .info-label {
+            color: #666;
+        }
+
+        .info-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .last-updated {
+            text-align: center;
+            color: white;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 18px;
+            padding: 20px;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📈 Real-Time Stock Ticker</h1>
+        
+        <div class="controls">
+            <div class="input-group">
+                <input type="text" id="symbolInput" placeholder="Enter stock symbol (e.g., AAPL, MSFT, GOOGL)" 
+                       onkeypress="if(event.key === 'Enter') addStock()">
+                <button onclick="addStock()">Add Stock</button>
+            </div>
+            <div class="api-note">
+                💡 <strong>Demo Mode:</strong> This uses simulated data for demonstration. To use real data, get a free API key from 
+                <a href="https://www.alphavantage.co/support/#api-key" target="_blank">Alpha Vantage</a> and add it to the code.
+            </div>
+            <div id="errorMessage"></div>
+        </div>
+
+        <div id="tickerGrid" class="ticker-grid"></div>
+        <div class="last-updated" id="lastUpdated"></div>
+    </div>
+
+    <script>
+        // Storage for stock data
+        let stocks = {};
+        let updateInterval;
+
+        // Simulated stock data for demo (replace with real API)
+        const demoStocks = {
+            'AAPL': { name: 'Apple Inc.', basePrice: 178.50 },
+            'MSFT': { name: 'Microsoft Corp.', basePrice: 425.80 },
+            'GOOGL': { name: 'Alphabet Inc.', basePrice: 142.30 },
+            'AMZN': { name: 'Amazon.com Inc.', basePrice: 178.25 },
+            'TSLA': { name: 'Tesla Inc.', basePrice: 242.84 },
+            'META': { name: 'Meta Platforms', basePrice: 512.32 },
+            'NVDA': { name: 'NVIDIA Corp.', basePrice: 880.45 }
+        };
+
+        // Initialize with some default stocks
+        window.onload = function() {
+            addStockBySymbol('AAPL');
+            addStockBySymbol('MSFT');
+            addStockBySymbol('GOOGL');
+            startAutoUpdate();
+        };
+
+        function addStock() {
+            const input = document.getElementById('symbolInput');
+            const symbol = input.value.trim().toUpperCase();
+            
+            if (!symbol) {
+                showError('Please enter a stock symbol');
+                return;
+            }
+
+            addStockBySymbol(symbol);
+            input.value = '';
+        }
+
+        function addStockBySymbol(symbol) {
+            if (stocks[symbol]) {
+                showError(`${symbol} is already being tracked`);
+                return;
+            }
+
+            if (!demoStocks[symbol]) {
+                showError(`${symbol} not found in demo data. Try: AAPL, MSFT, GOOGL, AMZN, TSLA, META, NVDA`);
+                return;
+            }
+
+            // Initialize stock data
+            stocks[symbol] = {
+                symbol: symbol,
+                name: demoStocks[symbol].name,
+                price: demoStocks[symbol].basePrice,
+                change: 0,
+                changePercent: 0,
+                high: demoStocks[symbol].basePrice,
+                low: demoStocks[symbol].basePrice,
+                volume: Math.floor(Math.random() * 100000000)
+            };
+
+            clearError();
+            renderStocks();
+        }
+
+        function removeStock(symbol) {
+            delete stocks[symbol];
+            renderStocks();
+        }
+
+        function updateStockPrices() {
+            // Simulate real-time price changes
+            for (let symbol in stocks) {
+                const stock = stocks[symbol];
+                const basePrice = demoStocks[symbol].basePrice;
+                
+                // Random price change (-2% to +2%)
+                const changePercent = (Math.random() - 0.5) * 0.04;
+                const previousPrice = stock.price;
+                stock.price = basePrice * (1 + (Math.random() - 0.5) * 0.05);
+                
+                stock.change = stock.price - basePrice;
+                stock.changePercent = (stock.change / basePrice) * 100;
+                
+                stock.high = Math.max(stock.high, stock.price);
+                stock.low = Math.min(stock.low, stock.price);
+                stock.volume += Math.floor(Math.random() * 10000);
+            }
+
+            renderStocks();
+            updateLastUpdatedTime();
+        }
+
+        function renderStocks() {
+            const grid = document.getElementById('tickerGrid');
+            
+            if (Object.keys(stocks).length === 0) {
+                grid.innerHTML = '<div class="loading">Add some stocks to get started!</div>';
+                return;
+            }
+
+            grid.innerHTML = Object.values(stocks).map(stock => `
+                <div class="stock-card">
+                    <div class="stock-header">
+                        <span class="symbol">${stock.symbol}</span>
+                        <button class="remove-btn" onclick="removeStock('${stock.symbol}')">Remove</button>
+                    </div>
+                    <div class="price">$${stock.price.toFixed(2)}</div>
+                    <div class="change ${stock.change >= 0 ? 'positive' : 'negative'}">
+                        ${stock.change >= 0 ? '▲' : '▼'} 
+                        $${Math.abs(stock.change).toFixed(2)} 
+                        (${stock.changePercent.toFixed(2)}%)
+                    </div>
+                    <div class="info">
+                        <div class="info-row">
+                            <span class="info-label">Company:</span>
+                            <span class="info-value">${stock.name}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">High:</span>
+                            <span class="info-value">$${stock.high.toFixed(2)}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Low:</span>
+                            <span class="info-value">$${stock.low.toFixed(2)}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Volume:</span>
+                            <span class="info-value">${stock.volume.toLocaleString()}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function startAutoUpdate() {
+            updateInterval = setInterval(updateStockPrices, 3000); // Update every 3 seconds
+        }
+
+        function updateLastUpdatedTime() {
+            const now = new Date();
+            document.getElementById('lastUpdated').textContent = 
+                `Last updated: ${now.toLocaleTimeString()}`;
+        }
+
+        function showError(message) {
+            document.getElementById('errorMessage').innerHTML = 
+                `<div class="error">${message}</div>`;
+        }
+
+        function clearError() {
+            document.getElementById('errorMessage').innerHTML = '';
+        }
+
+        // Clean up on page unload
+        window.onbeforeunload = function() {
+            clearInterval(updateInterval);
+        };
+    </script>
+</body>
+</html>
